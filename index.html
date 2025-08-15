@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>무한 던전</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            font-family: 'Arial', sans-serif;
+        }
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            z-index: 1000;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <div id="ui-overlay">
+        <h3>무한 던전</h3>
+        <p>방향키로 이동하세요</p>
+        <p>스페이스바로 공격하세요</p>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    <script src="DungeonScene.js"></script>
+    <script>
+
+        // 게임 설정
+        const config = {
+            type: Phaser.AUTO,
+            width: window.innerWidth,
+            height: window.innerHeight,
+            parent: 'game-container',
+            backgroundColor: '#000000',
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 0 },
+                    debug: false
+                }
+            },
+            scene: DungeonScene,
+            scale: {
+                mode: Phaser.Scale.RESIZE,
+                autoCenter: Phaser.Scale.CENTER_BOTH
+            }
+        };
+
+        // 게임 인스턴스 생성
+        const game = new Phaser.Game(config);
+        
+        // 에러 핸들링
+        window.addEventListener('error', function(e) {
+            console.error('게임 에러:', e.error);
+        });
+        
+        // 게임 로드 완료 확인
+        game.events.on('ready', function() {
+            console.log('게임 준비 완료!');
+        });
+    </script>
+</body>
+</html>

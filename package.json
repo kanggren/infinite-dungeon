@@ -1,0 +1,24 @@
+{
+  "name": "infinite-dungeon",
+  "version": "1.0.0",
+  "description": "무한 던전 게임",
+  "scripts": {
+    "start": "parcel index.html",
+    "build": "parcel build index.html",
+    "dev": "parcel index.html --open"
+  },
+  "dependencies": {
+    "phaser": "^3.70.0"
+  },
+  "devDependencies": {
+    "parcel": "^2.10.3",
+    "process": "^0.11.10"
+  },
+  "keywords": [
+    "game",
+    "dungeon",
+    "phaser"
+  ],
+  "author": "",
+  "license": "MIT"
+}
