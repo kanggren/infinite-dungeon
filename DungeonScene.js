@@ -21,6 +21,14 @@ class DungeonScene extends Phaser.Scene {
         this.healthBar = null;
         this.healthText = null;
         
+        // 경험치 및 레벨 시스템
+        this.playerExp = 0;
+        this.playerLevel = 1;
+        this.expToNextLevel = 100; // 다음 레벨까지 필요한 경험치
+        this.expBar = null;
+        this.expText = null;
+        this.levelText = null;
+        
         // 몬스터 AI 시스템
         this.monsterDetectionRange = 150; // 몬스터가 플레이어를 감지하는 범위
         this.monsterAttackRange = 40; // 몬스터 공격 범위
@@ -80,6 +88,12 @@ class DungeonScene extends Phaser.Scene {
         
         // 체력바 생성
         this.createHealthBar();
+        
+        // 경험치 및 레벨 UI 생성
+        this.createExperienceUI();
+        
+        // 화면 크기 변경 이벤트 리스너 추가
+        this.scale.on('resize', this.onResize, this);
         
         // 디버그 정보 표시
         console.log('게임 생성 완료');
@@ -173,6 +187,7 @@ class DungeonScene extends Phaser.Scene {
                         // 몬스터에 고유 ID 부여
                         monster.monsterId = monsterCount;
                         monster.spriteKey = spriteKey;
+                        monster.monsterType = 'normal'; // 일반 몬스터
                         monster.hp = 8; // 몬스터 HP 설정 (높임)
                         monster.maxHp = 8;
                         
@@ -244,6 +259,7 @@ class DungeonScene extends Phaser.Scene {
                     
                     // 몬스터에 고유 ID 부여
                     monster.monsterId = `start_${index}`;
+                    monster.monsterType = 'normal'; // 일반 몬스터
                     monster.spriteKey = spriteKey;
                     monster.hp = 8; // 몬스터 HP 설정 (높임)
                     monster.maxHp = 8;
@@ -776,6 +792,158 @@ class DungeonScene extends Phaser.Scene {
         // 텍스트 위치 업데이트
         this.healthText.setPosition(playerX, playerY - 25);
     }
+    
+    createExperienceUI() {
+        // 화면 오른쪽 상단에 경험치 UI 위치
+        const rightMargin = 20;
+        const topMargin = 20;
+        const uiWidth = 200;
+        const uiHeight = 60;
+        
+        // UI 배경 (반투명 검은색)
+        this.expUIBackground = this.add.rectangle(
+            this.cameras.main.width - rightMargin - uiWidth/2, 
+            topMargin + uiHeight/2, 
+            uiWidth + 20, 
+            uiHeight + 20, 
+            0x000000, 
+            0.7
+        );
+        this.expUIBackground.setDepth(10);
+        this.expUIBackground.setOrigin(0.5);
+        
+        // 경험치바 배경 (회색)
+        this.expBar = this.add.rectangle(
+            this.cameras.main.width - rightMargin - uiWidth/2, 
+            topMargin + 35, 
+            uiWidth, 
+            8, 
+            0x666666
+        );
+        this.expBar.setDepth(10);
+        this.expBar.setOrigin(0.5);
+        
+        // 경험치바 (파란색)
+        this.expBarFill = this.add.rectangle(
+            this.cameras.main.width - rightMargin - uiWidth/2, 
+            topMargin + 35, 
+            0, 
+            8, 
+            0x0088ff
+        );
+        this.expBarFill.setDepth(10);
+        this.expBarFill.setOrigin(0, 0.5);
+        
+        // 경험치 텍스트
+        this.expText = this.add.text(
+            this.cameras.main.width - rightMargin - uiWidth/2, 
+            topMargin + 50, 
+            'EXP: 0/100', {
+                fontSize: '14px',
+                fill: '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 2
+            }
+        );
+        this.expText.setDepth(10);
+        this.expText.setOrigin(0.5);
+        
+        // 좌측 상단에 레벨 표시 추가
+        const leftMargin = 20;
+        const levelUiWidth = 120;
+        const levelUiHeight = 40;
+        
+        // 레벨 UI 배경 (반투명 검은색)
+        this.levelUIBackground = this.add.rectangle(
+            leftMargin + levelUiWidth/2, 
+            topMargin + levelUiHeight/2, 
+            levelUiWidth + 20, 
+            levelUiHeight + 20, 
+            0x000000, 
+            0.7
+        );
+        this.levelUIBackground.setDepth(10);
+        this.levelUIBackground.setOrigin(0.5);
+        
+        // 레벨 텍스트 (좌측 상단)
+        this.levelText = this.add.text(
+            leftMargin + levelUiWidth/2, 
+            topMargin + levelUiHeight/2, 
+            'LV.1', {
+                fontSize: '20px',
+                fill: '#ffff00',
+                stroke: '#000000',
+                strokeThickness: 2,
+                fontStyle: 'bold'
+            }
+        );
+        this.levelText.setDepth(10);
+        this.levelText.setOrigin(0.5);
+        
+        // 초기 경험치 UI 업데이트
+        this.updateExperienceUI();
+    }
+    
+        updateExperienceUI() {
+        if (this.expBarFill && this.expText && this.levelText) {
+            // 경험치바 업데이트
+            const expRatio = this.playerExp / this.expToNextLevel;
+            const newWidth = 200 * expRatio;
+            this.expBarFill.setSize(newWidth, 8);
+            
+            // 경험치바 위치 재설정 (오른쪽 상단 기준)
+            const rightMargin = 20;
+            const topMargin = 20;
+            const uiWidth = 200;
+            
+            // 경험치바 배경과 채움바 위치 동기화
+            if (this.expBar) {
+                this.expBar.setPosition(
+                    this.cameras.main.width - rightMargin - uiWidth/2, 
+                    topMargin + 35
+                );
+            }
+            
+            // 경험치바 채움바 위치 설정
+            this.expBarFill.setPosition(
+                this.cameras.main.width - rightMargin - uiWidth, 
+                topMargin + 35
+            );
+            
+            // 경험치 텍스트 업데이트
+            this.expText.setText(`EXP: ${this.playerExp}/${this.expToNextLevel}`);
+            
+            // 레벨 텍스트 업데이트 (좌측 상단)
+            this.levelText.setText(`LV.${this.playerLevel}`);
+            
+            // HTML의 레벨 표시도 업데이트
+            this.updateHTMLLevelDisplay();
+        }
+    }
+    
+    updateHTMLLevelDisplay() {
+        // HTML의 레벨 표시 업데이트
+        const levelDisplay = document.getElementById('level-display');
+        if (levelDisplay) {
+            levelDisplay.textContent = `LV.${this.playerLevel}`;
+        }
+        
+        // HTML의 경험치바 업데이트
+        const expBarFill = document.getElementById('exp-bar-fill');
+        const expText = document.getElementById('exp-text');
+        
+        if (expBarFill && expText) {
+            // 경험치바 채움 비율 계산
+            const expRatio = this.playerExp / this.expToNextLevel;
+            const fillWidth = Math.min(100, expRatio * 100);
+            
+            // 경험치바 채움 너비 설정
+            expBarFill.style.width = `${fillWidth}%`;
+            
+            // 경험치 텍스트 업데이트
+            expText.textContent = `EXP: ${this.playerExp}/${this.expToNextLevel}`;
+        }
+    }
 
     update() {
         // 공격 쿨다운 감소
@@ -948,6 +1116,9 @@ class DungeonScene extends Phaser.Scene {
                         // 몬스터를 즉시 제거하지 않고 HP 바만 사라지게 함
                         monster.isDead = true;
                         
+                        // 몬스터가 죽었을 때 경험치 획득
+                        this.gainExperience(monster);
+                        
                         // 몬스터가 죽었을 때 시각적 효과 추가
                         this.monsterDeathEffect(monster);
                         
@@ -1035,6 +1206,133 @@ class DungeonScene extends Phaser.Scene {
         }
     }
     
+    gainExperience(monster) {
+        // 몬스터 타입에 따른 경험치 획득
+        let expGain = 10; // 기본 경험치
+        
+        // 몬스터 타입별 경험치 차등 지급 (향후 확장 가능)
+        if (monster.monsterType === 'boss') {
+            expGain = 50;
+        } else if (monster.monsterType === 'elite') {
+            expGain = 25;
+        }
+        
+        // 경험치 획득
+        this.playerExp += expGain;
+        
+        // 경험치 획득 표시
+        this.showExperienceGain(monster.x, monster.y, expGain);
+        
+        // 레벨업 체크
+        this.checkLevelUp();
+        
+        // 경험치 UI 업데이트
+        this.updateExperienceUI();
+        
+        console.log(`경험치 ${expGain} 획득! 총 경험치: ${this.playerExp}/${this.expToNextLevel}`);
+    }
+    
+    checkLevelUp() {
+        if (this.playerExp >= this.expToNextLevel) {
+            // 레벨업!
+            this.playerLevel++;
+            this.playerExp -= this.expToNextLevel;
+            
+            // 다음 레벨까지 필요한 경험치 증가 (레벨이 올라갈수록 더 많은 경험치 필요)
+            this.expToNextLevel = Math.floor(this.expToNextLevel * 1.5);
+            
+            // 레벨업 효과
+            this.levelUpEffect();
+            
+            // 스탯 증가 (HP, 공격력 등)
+            this.increasePlayerStats();
+            
+            console.log(`레벨업! 현재 레벨: ${this.playerLevel}, 다음 레벨까지: ${this.expToNextLevel}`);
+        }
+    }
+    
+    increasePlayerStats() {
+        // HP 증가
+        this.maxPlayerHealth += 20;
+        this.playerHealth = this.maxPlayerHealth;
+        
+        // 공격력 증가 (향후 구현 예정)
+        // this.playerAttack += 2;
+        
+        // 체력바 업데이트
+        this.updateHealthBar();
+    }
+    
+    levelUpEffect() {
+        // 레벨업 텍스트 표시
+        const levelUpText = this.add.text(
+            this.cameras.main.centerX, 
+            this.cameras.main.centerY - 100, 
+            `LEVEL UP! ${this.playerLevel}`, {
+                fontSize: '36px',
+                fill: '#00ff00',
+                stroke: '#ffffff',
+                strokeThickness: 3,
+                fontStyle: 'bold'
+            }
+        );
+        levelUpText.setOrigin(0.5);
+        levelUpText.setDepth(100);
+        
+        // 레벨업 텍스트 애니메이션
+        this.tweens.add({
+            targets: levelUpText,
+            y: levelUpText.y - 50,
+            alpha: 0,
+            scale: 1.5,
+            duration: 2000,
+            ease: 'Power2',
+            onComplete: () => {
+                if (levelUpText && levelUpText.active) {
+                    levelUpText.destroy();
+                }
+            }
+        });
+        
+        // 화면 효과
+        this.cameras.main.flash(500, 0x00ff00, 0.3);
+    }
+    
+    showExperienceGain(x, y, exp) {
+        try {
+            // 경험치 획득 텍스트 생성
+            const expText = this.add.text(x, y - 60, `+${exp} EXP`, {
+                fontSize: '16px',
+                fill: '#00ff00',
+                stroke: '#ffffff',
+                strokeThickness: 2,
+                fontStyle: 'bold'
+            });
+            expText.setOrigin(0.5);
+            expText.setDepth(4);
+            
+            // 경험치 텍스트 애니메이션 (위로 올라가면서 페이드아웃)
+            this.tweens.add({
+                targets: expText,
+                y: y - 100,
+                alpha: 0,
+                duration: 1500,
+                ease: 'Power2',
+                onComplete: () => {
+                    try {
+                        if (expText && expText.active) {
+                            expText.destroy();
+                        }
+                    } catch (error) {
+                        console.log('경험치 텍스트 제거 중 오류:', error);
+                    }
+                }
+            });
+        } catch (error) {
+            console.log('경험치 획득 표시 중 오류:', error);
+        }
+    }
+    
     showDamageNumber(x, y, damage) {
         try {
             // 데미지 텍스트 생성
@@ -1103,6 +1401,60 @@ class DungeonScene extends Phaser.Scene {
             console.log(`몬스터 ${monster.monsterId}가 ${remainsKey}로 변경됨`);
         } catch (error) {
             console.log('몬스터를 뼈 잔해로 변경하는 중 오류:', error);
+        }
+    }
+    
+    onResize() {
+        // 화면 크기 변경 시 UI 위치 업데이트
+        if (this.expUIBackground && this.expBar && this.expBarFill && this.expText && this.levelText) {
+            const rightMargin = 20;
+            const topMargin = 20;
+            const uiWidth = 200;
+            const uiHeight = 60;
+            
+            // UI 배경 위치 업데이트
+            this.expUIBackground.setPosition(
+                this.cameras.main.width - rightMargin - uiWidth/2, 
+                topMargin + uiHeight/2
+            );
+            
+            // 경험치바 배경 위치 업데이트
+            this.expBar.setPosition(
+                this.cameras.main.width - rightMargin - uiWidth/2, 
+                topMargin + 35
+            );
+            
+            // 경험치바 채움바 위치 업데이트
+            this.expBarFill.setPosition(
+                this.cameras.main.width - rightMargin - uiWidth, 
+                topMargin + 35
+            );
+            
+            // 경험치 텍스트 위치 업데이트
+            this.expText.setPosition(
+                this.cameras.main.width - rightMargin - uiWidth/2, 
+                topMargin + 50
+            );
+        }
+        
+        // 좌측 상단 레벨 UI 위치 업데이트
+        if (this.levelUIBackground && this.levelText) {
+            const leftMargin = 20;
+            const topMargin = 20;
+            const levelUiWidth = 120;
+            const levelUiHeight = 40;
+            
+            // 레벨 UI 배경 위치 업데이트
+            this.levelUIBackground.setPosition(
+                leftMargin + levelUiWidth/2, 
+                topMargin + levelUiHeight/2
+            );
+            
+            // 레벨 텍스트 위치 업데이트
+            this.levelText.setPosition(
+                leftMargin + levelUiWidth/2, 
+                topMargin + levelUiHeight/2
+            );
         }
     }
     
