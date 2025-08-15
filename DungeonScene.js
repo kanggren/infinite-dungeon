@@ -14,6 +14,21 @@ class DungeonScene extends Phaser.Scene {
         this.monsters = null;
         this.monsterAnimationTimer = 0;
         this.attackRange = 50; // 공격 범위
+        
+        // 플레이어 체력 시스템
+        this.playerHealth = 100;
+        this.maxPlayerHealth = 100;
+        this.healthBar = null;
+        this.healthText = null;
+        
+        // 몬스터 AI 시스템
+        this.monsterDetectionRange = 150; // 몬스터가 플레이어를 감지하는 범위
+        this.monsterAttackRange = 40; // 몬스터 공격 범위
+        this.monsterAttackCooldown = 60; // 몬스터 공격 쿨다운 (프레임)
+        this.monsterMoveSpeed = 80; // 몬스터 이동 속도
+        this.monsterAttackDamage = 15; // 몬스터 공격 데미지
+        this.playerInvincibleTime = 0; // 플레이어 무적 시간
+        this.playerInvincibleDuration = 120; // 플레이어 무적 지속 시간 (프레임)
     }
 
     preload() {
@@ -62,6 +77,9 @@ class DungeonScene extends Phaser.Scene {
         
         // 시작점 표시
         this.createStartPoint();
+        
+        // 체력바 생성
+        this.createHealthBar();
         
         // 디버그 정보 표시
         console.log('게임 생성 완료');
@@ -158,8 +176,19 @@ class DungeonScene extends Phaser.Scene {
                         monster.hp = 8; // 몬스터 HP 설정 (높임)
                         monster.maxHp = 8;
                         
+                        // 몬스터 AI 속성 추가
+                        monster.attackCooldown = 0;
+                        monster.isChasing = false;
+                        monster.targetX = monster.x;
+                        monster.targetY = monster.y;
+                        monster.lastMoveTime = 0;
+                        
                         // 몬스터 HP 바 생성
                         monster.hpBar = this.createMonsterHpBar(monster);
+                        
+                        // 몬스터 공격 범위 표시 (디버그용, 선택적으로 활성화)
+                        // monster.attackRangeIndicator = this.add.circle(monster.x, monster.y, this.monsterAttackRange, 0xff0000, 0.2);
+                        // monster.attackRangeIndicator.setDepth(1);
                         
                         this.monsters.add(monster);
                         monsterCount++;
@@ -219,8 +248,19 @@ class DungeonScene extends Phaser.Scene {
                     monster.hp = 8; // 몬스터 HP 설정 (높임)
                     monster.maxHp = 8;
                     
+                    // 몬스터 AI 속성 추가
+                    monster.attackCooldown = 0;
+                    monster.isChasing = false;
+                    monster.targetX = monster.x;
+                    monster.targetY = monster.y;
+                    monster.lastMoveTime = 0;
+                    
                     // 몬스터 HP 바 생성
                     monster.hpBar = this.createMonsterHpBar(monster);
+                    
+                    // 몬스터 공격 범위 표시 (디버그용, 선택적으로 활성화)
+                    // monster.attackRangeIndicator = this.add.circle(monster.x, monster.y, this.monsterAttackRange, 0xff0000, 0.2);
+                    // monster.attackRangeIndicator.setDepth(1);
                     
                     this.monsters.add(monster);
                     
@@ -267,6 +307,247 @@ class DungeonScene extends Phaser.Scene {
             // 타이머 리셋
             this.monsterAnimationTimer = 0;
         }
+    }
+
+    updateMonsterAI() {
+        if (!this.player || !this.monsters) return;
+        
+        const activeMonsters = this.monsters.getChildren().filter(monster => 
+            monster && monster.active && !monster.isDead && monster.hp > 0 && !monster.isRemains
+        );
+        
+        activeMonsters.forEach(monster => {
+            try {
+                // 플레이어와의 거리 계산
+                const distanceToPlayer = Phaser.Math.Distance.Between(
+                    monster.x, monster.y, 
+                    this.player.x, this.player.y
+                );
+                
+                // 공격 쿨다운 감소
+                if (monster.attackCooldown > 0) {
+                    monster.attackCooldown--;
+                }
+                
+                // 플레이어가 감지 범위 내에 있는지 확인
+                if (distanceToPlayer <= this.monsterDetectionRange) {
+                    monster.isChasing = true;
+                    
+                    // 추적 상태일 때 몬스터를 빨간색으로 표시
+                    monster.setTint(0xff6666);
+                    
+                    // 공격 범위 내에 있으면 공격
+                    if (distanceToPlayer <= this.monsterAttackRange && monster.attackCooldown === 0) {
+                        this.monsterAttackPlayer(monster);
+                    } else if (distanceToPlayer > this.monsterAttackRange) {
+                        // 플레이어를 향해 이동
+                        this.moveMonsterTowardsPlayer(monster);
+                    }
+                } else {
+                    monster.isChasing = false;
+                    // 원래 색상으로 복원
+                    monster.clearTint();
+                    // 원래 위치로 돌아가기
+                    this.returnMonsterToOriginalPosition(monster);
+                }
+                
+                // HP 바 위치 업데이트
+                if (monster.hpBarBg && monster.hpBarBg.active) {
+                    monster.hpBarBg.setPosition(monster.x, monster.y - 25);
+                }
+                if (monster.hpBarFill && monster.hpBarFill.active) {
+                    monster.hpBarFill.setPosition(monster.x, monster.y - 25);
+                }
+                
+                // 공격 범위 표시 업데이트 (디버그용)
+                if (monster.attackRangeIndicator && monster.attackRangeIndicator.active) {
+                    monster.attackRangeIndicator.setPosition(monster.x, monster.y);
+                }
+                
+            } catch (error) {
+                console.log('몬스터 AI 업데이트 중 오류:', error);
+            }
+        });
+    }
+
+    moveMonsterTowardsPlayer(monster) {
+        if (!this.player) return;
+        
+        // 플레이어 방향으로의 각도 계산
+        const angle = Phaser.Math.Angle.Between(monster.x, monster.y, this.player.x, this.player.y);
+        
+        // 각도를 기반으로 속도 계산
+        const velocityX = Math.cos(angle) * this.monsterMoveSpeed;
+        const velocityY = Math.sin(angle) * this.monsterMoveSpeed;
+        
+        // 몬스터 위치 업데이트
+        monster.x += velocityX * 0.016; // 60fps 기준으로 조정
+        monster.y += velocityY * 0.016;
+        
+        // 벽과의 충돌 검사 (간단한 구현)
+        this.checkMonsterWallCollision(monster);
+    }
+
+    returnMonsterToOriginalPosition(monster) {
+        // 원래 위치로 돌아가기
+        const distanceToOriginal = Phaser.Math.Distance.Between(
+            monster.x, monster.y, 
+            monster.targetX, monster.targetY
+        );
+        
+        if (distanceToOriginal > 5) { // 5픽셀 이내면 제자리에 있음
+            const angle = Phaser.Math.Angle.Between(monster.x, monster.y, monster.targetX, monster.targetY);
+            const velocityX = Math.cos(angle) * (this.monsterMoveSpeed * 0.5); // 천천히 돌아감
+            const velocityY = Math.sin(angle) * (this.monsterMoveSpeed * 0.5);
+            
+            monster.x += velocityX * 0.016;
+            monster.y += velocityY * 0.016;
+            
+            // 벽과의 충돌 검사
+            this.checkMonsterWallCollision(monster);
+        }
+    }
+
+    checkMonsterWallCollision(monster) {
+        // 간단한 벽 충돌 검사
+        const monsterBounds = {
+            left: monster.x - 16,
+            right: monster.x + 16,
+            top: monster.y - 16,
+            bottom: monster.y + 16
+        };
+        
+        // 맵 경계 검사
+        if (monsterBounds.left < 0) monster.x = 16;
+        if (monsterBounds.right > this.dungeonMap.width * this.tileSize) monster.x = this.dungeonMap.width * this.tileSize - 16;
+        if (monsterBounds.top < 0) monster.y = 16;
+        if (monsterBounds.bottom > this.dungeonMap.height * this.tileSize) monster.y = this.dungeonMap.height * this.tileSize - 16;
+    }
+
+    monsterAttackPlayer(monster) {
+        if (!this.player || this.playerInvincibleTime > 0) return;
+        
+        // 공격 쿨다운 설정
+        monster.attackCooldown = this.monsterAttackCooldown;
+        
+        // 플레이어에게 데미지
+        this.playerHealth -= this.monsterAttackDamage;
+        this.playerHealth = Math.max(0, this.playerHealth);
+        
+        // 플레이어 무적 시간 설정
+        this.playerInvincibleTime = this.playerInvincibleDuration;
+        
+        // 데미지 표시
+        this.showPlayerDamageNumber(this.player.x, this.player.y, this.monsterAttackDamage);
+        
+        // 플레이어 피격 효과
+        this.playerHitEffect();
+        
+        console.log(`플레이어가 몬스터 ${monster.monsterId}에게 공격받음! 데미지: ${this.monsterAttackDamage}, HP: ${this.playerHealth}`);
+        
+        // 체력바 업데이트
+        this.updateHealthBar();
+        
+        // 플레이어가 죽었는지 확인
+        if (this.playerHealth <= 0) {
+            this.playerDeath();
+        }
+    }
+
+    showPlayerDamageNumber(x, y, damage) {
+        try {
+            // 데미지 텍스트 생성
+            const damageText = this.add.text(x, y - 40, damage.toString(), {
+                fontSize: '20px',
+                fill: '#ff0000',
+                stroke: '#ffffff',
+                strokeThickness: 2,
+                fontStyle: 'bold'
+            });
+            damageText.setOrigin(0.5);
+            damageText.setDepth(4);
+            
+            // 데미지 텍스트 애니메이션 (위로 올라가면서 페이드아웃)
+            this.tweens.add({
+                targets: damageText,
+                y: y - 80,
+                alpha: 0,
+                duration: 1000,
+                ease: 'Power2',
+                onComplete: () => {
+                    try {
+                        if (damageText && damageText.active) {
+                            damageText.destroy();
+                        }
+                    } catch (error) {
+                        console.log('플레이어 데미지 텍스트 제거 중 오류:', error);
+                    }
+                }
+            });
+        } catch (error) {
+            console.log('플레이어 데미지 숫자 표시 중 오류:', error);
+        }
+    }
+
+    playerHitEffect() {
+        if (!this.player) return;
+        
+        // 플레이어 피격 시 빨간색 깜빡임 효과
+        const originalTint = this.player.tint;
+        this.player.setTint(0xff0000);
+        
+        // 0.2초 후 원래 색상으로 복원
+        this.time.delayedCall(200, () => {
+            if (this.player && this.player.active) {
+                this.player.clearTint();
+            }
+        });
+        
+        // 화면 흔들림 효과
+        this.cameras.main.shake(200, 0.01);
+    }
+
+    playerDeath() {
+        if (!this.player) return;
+        
+        console.log('플레이어가 사망했습니다!');
+        
+        // 플레이어 사망 효과
+        this.player.setTint(0x666666);
+        
+        // 게임 오버 텍스트 표시
+        const gameOverText = this.add.text(
+            this.cameras.main.centerX, 
+            this.cameras.main.centerY, 
+            'GAME OVER', {
+                fontSize: '48px',
+                fill: '#ff0000',
+                stroke: '#ffffff',
+                strokeThickness: 4,
+                fontStyle: 'bold'
+            }
+        );
+        gameOverText.setOrigin(0.5);
+        gameOverText.setDepth(100);
+        
+        // 재시작 안내 텍스트
+        const restartText = this.add.text(
+            this.cameras.main.centerX, 
+            this.cameras.main.centerY + 60, 
+            'R 키를 눌러 재시작', {
+                fontSize: '24px',
+                fill: '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 2
+            }
+        );
+        restartText.setOrigin(0.5);
+        restartText.setDepth(100);
+        
+        // R 키로 재시작 기능 추가
+        this.input.keyboard.once('keydown-R', () => {
+            this.scene.restart();
+        });
     }
 
     createStartPoint() {
@@ -437,6 +718,64 @@ class DungeonScene extends Phaser.Scene {
         
         console.log('플레이어 생성 완료:', startX, startY);
     }
+    
+    createHealthBar() {
+        // 체력바 배경 (빨간색)
+        this.healthBar = this.add.graphics();
+        this.healthBar.setDepth(10); // UI를 최상단에 표시
+        
+        // 체력바 텍스트
+        this.healthText = this.add.text(0, 0, `HP: ${this.playerHealth}/${this.maxPlayerHealth}`, {
+            fontSize: '14px',
+            fill: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        this.healthText.setDepth(10);
+        this.healthText.setOrigin(0.5, 0.5);
+        
+        // 체력바 업데이트
+        this.updateHealthBar();
+    }
+    
+    updateHealthBar() {
+        if (!this.healthBar || !this.healthText || !this.player) return;
+        
+        // 플레이어 위치 기준으로 체력바 위치 설정
+        const playerX = this.player.x;
+        const playerY = this.player.y - 40; // 플레이어 위 40픽셀
+        
+        // 체력바 그리기
+        this.healthBar.clear();
+        
+        // 배경 (빨간색)
+        this.healthBar.fillStyle(0xff0000);
+        this.healthBar.fillRect(playerX - 25, playerY - 10, 50, 8);
+        
+        // 현재 체력 (녹색)
+        const healthPercentage = this.playerHealth / this.maxPlayerHealth;
+        this.healthBar.fillStyle(0x00ff00);
+        this.healthBar.fillRect(playerX - 25, playerY - 10, 50 * healthPercentage, 8);
+        
+        // 테두리
+        this.healthBar.lineStyle(1, 0xffffff);
+        this.healthBar.strokeRect(playerX - 25, playerY - 10, 50, 8);
+        
+        // 무적 상태일 때 체력바에 무적 효과 추가
+        if (this.playerInvincibleTime > 0) {
+            // 무적 상태일 때 체력바를 노란색으로 표시
+            this.healthBar.fillStyle(0xffff00, 0.5);
+            this.healthBar.fillRect(playerX - 25, playerY - 10, 50, 8);
+            
+            // 무적 상태 텍스트 표시
+            this.healthText.setText(`HP: ${this.playerHealth}/${this.maxPlayerHealth} (무적!)`);
+        } else {
+            this.healthText.setText(`HP: ${this.playerHealth}/${this.maxPlayerHealth}`);
+        }
+        
+        // 텍스트 위치 업데이트
+        this.healthText.setPosition(playerX, playerY - 25);
+    }
 
     update() {
         // 공격 쿨다운 감소
@@ -444,14 +783,25 @@ class DungeonScene extends Phaser.Scene {
             this.attackCooldown--;
         }
         
+        // 플레이어 무적 시간 감소
+        if (this.playerInvincibleTime > 0) {
+            this.playerInvincibleTime--;
+        }
+        
         // 몬스터 애니메이션 업데이트
         this.updateMonsterAnimation();
+        
+        // 몬스터 AI 업데이트
+        this.updateMonsterAI();
         
         // 플레이어 이동 처리
         this.handlePlayerMovement();
         
         // 공격 입력 처리
         this.handleAttackInput();
+        
+        // 체력바 위치 업데이트 (플레이어를 따라다니도록)
+        this.updateHealthBar();
     }
 
     handlePlayerMovement() {
